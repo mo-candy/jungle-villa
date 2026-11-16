@@ -99,6 +99,7 @@
     import * as THREE from 'three';
     import { GLTFLoader } from './vendor/three/loaders/GLTFLoader.js';
     import { RoomEnvironment } from './vendor/three/environments/RoomEnvironment.js';
+    import { MeshoptDecoder } from './vendor/three/meshopt_decoder.js';
 
     // ==================== 世界参数 ====================
     const WORLD_RADIUS = 52;
@@ -213,6 +214,7 @@
 
     // ==================== 加载 ====================
     const loader = new GLTFLoader();
+    loader.setMeshoptDecoder(MeshoptDecoder);
     const texLoader = new THREE.TextureLoader();
     const barEl = document.querySelector('#bar > i');
     const msgEl = document.getElementById('msg');
