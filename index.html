@@ -69,7 +69,10 @@
       });
       // 标记脚本未执行（首次加载 50MB 资产在手机上可能较慢，留足时间）
       setTimeout(() => {
-        if (!window.__world) show('[诊断] 脚本尚未完成初始化（可能仍在加载资产或已报错）');
+        if (!window.__world) {
+          window.__initWarning = true;
+          show('[诊断] 脚本尚未完成初始化（可能仍在加载资产或已报错）');
+        }
       }, 90000);
     })();
   </script>
@@ -311,8 +314,9 @@
     const HOUSE_WALL = 0.45;     // 墙厚（米）
     const HOUSE_DOOR = 3.0;      // 门洞宽（米）
     function placeHouses(template) {
-      HOUSE_SPOTS.forEach(p => {
+      HOUSE_SPOTS.forEach((p, index) => {
         const h = template.clone();
+        h.name = 'JungleHouse_' + (index + 1);
         const b0 = new THREE.Box3().setFromObject(h);
         const s0 = new THREE.Vector3(); b0.getSize(s0);
         const c0 = new THREE.Vector3(); b0.getCenter(c0);
@@ -659,7 +663,7 @@
     });
     addEventListener('keyup', e => { keys[e.code] = false; });
 
-    let camYaw = Math.PI, camPitch = 0.38, camDist = 7.5;
+    let camYaw = 2.25, camPitch = 0.18, camDist = 8.5;
     let dragging = false, lastX = 0, lastY = 0;
     renderer.domElement.addEventListener('pointerdown', e => { dragging = true; lastX = e.clientX; lastY = e.clientY; });
     addEventListener('pointerup', () => { dragging = false; });
@@ -782,7 +786,7 @@
         camera.position.lerp(camTarget, Math.min(1, dt * 9));
         const minY = terrainHeight(camera.position.x, camera.position.z) + 0.55;
         if (camera.position.y < minY) camera.position.y = minY;
-        camera.lookAt(player.position.x, player.position.y + 0.9, player.position.z);
+        camera.lookAt(player.position.x, player.position.y + 1.4, player.position.z);
       }
 
       renderer.render(scene, camera);
@@ -875,6 +879,31 @@
         for (const p of NPC_SPOTS) {
           const gl = { scene: R.hero.scene.clone(true), animations: R.hero.animations };
           spawnNPC(gl, new THREE.Vector3(p.x, 0, p.z));
+        }
+
+        // 先把已加载贴图上传到 GPU，避免遮罩消失后植被短暂白模
+        stage('准备纹理');
+        const warmedTextures = new Set();
+        const textureSlots = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'alphaMap', 'emissiveMap'];
+        scene.traverse(o => {
+          if (!o.isMesh) return;
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          for (const mat of mats) for (const slot of textureSlots) {
+            const tex = mat && mat[slot];
+            if (tex && tex.image && !warmedTextures.has(tex)) {
+              renderer.initTexture(tex);
+              warmedTextures.add(tex);
+            }
+          }
+        });
+        renderer.compile(scene, camera);
+
+        // 慢网络下可能先出现 90 秒诊断；初始化成功后必须撤掉这条误报
+        if (window.__initWarning) {
+          const errBox = document.getElementById('err');
+          errBox.style.display = 'none';
+          errBox.textContent = '';
+          window.__initWarning = false;
         }
 
         barEl.style.width = '100%';
