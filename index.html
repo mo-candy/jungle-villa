@@ -111,7 +111,8 @@
     const FOG_COLOR = new THREE.Color(0x8fae7c);
     scene.fog = new THREE.FogExp2(FOG_COLOR.getHex(), 0.020);
 
-    const camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.1, 280);
+    // 远裁剪面必须大于天空球半径(400)，否则天空会被裁掉显示为黑
+    const camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.3, 700);
 
     const pmrem = new THREE.PMREMGenerator(renderer);
     scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.08).texture;
@@ -262,13 +263,18 @@
       for (let i = 0; i < pos.count; i++) {
         pos.setZ(i, terrainHeight(pos.getX(i), -pos.getY(i)));
       }
-      // 顶点色：每片三角随机绿色变体，打断贴图 repeat 的合成感
+      // 顶点色：大块苔绿斑 + 细碎深浅变化，打断贴图 repeat 的合成感
       const colors = new Float32Array(pos.count * 3);
       for (let i = 0; i < pos.count; i++) {
-        const n = (hashNoise(pos.getX(i) * 0.06 + 99, pos.getY(i) * 0.06 + 17) - 0.5) * 0.22;
-        colors[i*3+0] = 1 + n * 0.3;     // R 略偏
-        colors[i*3+1] = 1 + n;           // G 主变化
-        colors[i*3+2] = 1 + n * 0.5;     // B 略偏
+        const px = pos.getX(i), pz = -pos.getY(i);
+        const n = (hashNoise(px * 0.06 + 99, pz * 0.06 + 17) - 0.5) * 0.4;
+        const g = smoothstep(-0.35, 0.55,
+          Math.sin(px * 0.07) * Math.cos(pz * 0.055) * 0.75
+          + (hashNoise(px * 0.014, pz * 0.014) - 0.5) * 1.1);
+        const tint = 1 - g * 0.34;                 // 苔绿斑块把红/蓝压低，绿色相对突出
+        colors[i * 3 + 0] = (0.98 + n * 0.3) * tint;
+        colors[i * 3 + 1] = 1.02 + n * 0.4;
+        colors[i * 3 + 2] = (0.95 + n * 0.3) * tint * 0.97;
       }
       geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
       geo.computeVertexNormals();
@@ -276,8 +282,8 @@
       for (const t of [diff, nor, rough]) {
         if (!t) continue;
         t.wrapS = t.wrapT = THREE.RepeatWrapping;
-        // 18 次重复 = 约 200 米视野内每张 11 米，合成感减到可接受
-        t.repeat.set(18, 18);
+        // 26 次重复 = 320 米地面每张约 12 米，颗粒细节够、重复感被顶点色打散
+        t.repeat.set(26, 26);
         t.anisotropy = renderer.capabilities.getMaxAnisotropy();
       }
       if (diff) diff.colorSpace = THREE.SRGBColorSpace;
@@ -289,7 +295,7 @@
         roughness: 1, metalness: 0,
         vertexColors: true, color: 0xffffff,
       });
-      if (nor) mat.normalScale = new THREE.Vector2(0.9, 0.9);
+      if (nor) mat.normalScale = new THREE.Vector2(0.7, 0.7);
 
       const m = new THREE.Mesh(geo, mat);
       m.rotation.x = -Math.PI / 2;
@@ -758,10 +764,11 @@
           catch (e) { console.warn('贴图缺失，已跳过：', url); return null; }
         };
 
+        // 真实扫描地表（Poly Haven forest_ground_04，CC0 可平铺）
         const [gDiff, gNor, gRough] = await Promise.all([
-          safeTex(J + 'ground/grass_diff.jpg'),
-          safeTex(J + 'ground/grass_nor.jpg'),
-          safeTex(J + 'ground/grass_rough.jpg'),
+          safeTex(J + 'ground/forest_diff.jpg'),
+          safeTex(J + 'ground/forest_nor.jpg'),
+          safeTex(J + 'ground/forest_arm.jpg'),
         ]);
         tick('地表…');
 
@@ -794,11 +801,11 @@
 
         // 地被：InstancedMesh 实例化，各模板 mesh 只算一次 tris
         // 地被：InstancedMesh 实例化
-        scatterInstanced(R.canopy.scene, { count: 28, scaleMin: 0.7, scaleMax: 1.4, clearance: 0.5 });
-        scatterInstanced(R.shrub3.scene, { count: 70, scaleMin: 0.8, scaleMax: 1.8, clearance: 0.3 });
-        scatterInstanced(R.fern.scene,    { count: 70, scaleMin: 0.8, scaleMax: 1.8, clearance: 0.2, radiusMin: 4.5 });
-        scatterInstanced(R.grass.scene,   { count: 140, scaleMin: 0.9, scaleMax: 2.0, clearance: 0.15, radiusMin: 3.5 });
-        scatterInstanced(R.moss.scene,    { count: 24, scaleMin: 0.9, scaleMax: 2.0, clearance: 0.2, sink: 0.05 });
+        scatterInstanced(R.canopy.scene, { count: 44, scaleMin: 0.7, scaleMax: 1.5, clearance: 0.5 });
+        scatterInstanced(R.shrub3.scene, { count: 110, scaleMin: 0.8, scaleMax: 1.9, clearance: 0.3 });
+        scatterInstanced(R.fern.scene,    { count: 120, scaleMin: 0.8, scaleMax: 1.9, clearance: 0.2, radiusMin: 4.5 });
+        scatterInstanced(R.grass.scene,   { count: 260, scaleMin: 0.9, scaleMax: 2.0, clearance: 0.15, radiusMin: 3.5 });
+        scatterInstanced(R.moss.scene,    { count: 40, scaleMin: 0.9, scaleMax: 2.0, clearance: 0.2, sink: 0.05 });
 
         scatterInstanced(R.rock1.scene, { count: 14, scaleMin: 0.8, scaleMax: 1.9, clearance: 0.7, castShadow: true });
         scatterInstanced(R.rock2.scene, { count: 12, scaleMin: 0.7, scaleMax: 1.7, clearance: 0.7, castShadow: true });
