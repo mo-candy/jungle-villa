@@ -104,12 +104,12 @@
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.05;
+    renderer.toneMappingExposure = 0.96;
     document.body.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
     const FOG_COLOR = new THREE.Color(0x8fae7c);
-    scene.fog = new THREE.FogExp2(FOG_COLOR.getHex(), 0.020);
+    scene.fog = new THREE.FogExp2(FOG_COLOR.getHex(), 0.011);
 
     // 远裁剪面必须大于天空球半径(400)，否则天空会被裁掉显示为黑
     const camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.3, 700);
@@ -141,8 +141,8 @@
     scene.add(sky);
 
     // ==================== 灯光 ====================
-    scene.add(new THREE.HemisphereLight(0xbcd8ff, 0x40502a, 1.05));
-    const sun = new THREE.DirectionalLight(0xfff1d4, 2.5);
+    scene.add(new THREE.HemisphereLight(0xbcd8ff, 0x40502a, 0.72));
+    const sun = new THREE.DirectionalLight(0xfff1d4, 1.65);
     sun.position.set(48, 74, 34);
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
@@ -271,10 +271,10 @@
         const g = smoothstep(-0.35, 0.55,
           Math.sin(px * 0.07) * Math.cos(pz * 0.055) * 0.75
           + (hashNoise(px * 0.014, pz * 0.014) - 0.5) * 1.1);
-        const tint = 1 - g * 0.34;                 // 苔绿斑块把红/蓝压低，绿色相对突出
-        colors[i * 3 + 0] = (0.98 + n * 0.3) * tint;
-        colors[i * 3 + 1] = 1.02 + n * 0.4;
-        colors[i * 3 + 2] = (0.95 + n * 0.3) * tint * 0.97;
+        const tint = 1 - g * 0.45;                 // 苔绿斑块把红/蓝压低，绿色相对突出
+        colors[i * 3 + 0] = (0.86 + n * 0.26) * tint;
+        colors[i * 3 + 1] = (0.88 + n * 0.30) * (1 - g * 0.10);
+        colors[i * 3 + 2] = (0.82 + n * 0.24) * tint * 0.96;
       }
       geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
       geo.computeVertexNormals();
@@ -329,7 +329,7 @@
     const trunkColliders = [];
     function blockedByWorld(x, z, clearance) {
       for (const p of HOUSE_SPOTS) if (Math.hypot(x - p.x, z - p.z) < p.clear + clearance) return true;
-      if (Math.hypot(x, z) < 5.5 + clearance) return true;
+      if (Math.hypot(x, z) < 3.5 + clearance) return true;
       return false;
     }
     function nearTrunk(x, z, d) {
