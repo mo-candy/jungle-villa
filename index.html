@@ -35,6 +35,18 @@
       padding: 10px 14px; white-space: pre-wrap; display: none; z-index: 99; }
     #dbg { position: fixed; left: 18px; bottom: 14px; color: rgba(220,240,200,.55);
       font: 11px/1.6 Consolas, monospace; pointer-events: none; white-space: pre; }
+    #enterBtn { position: fixed; left: 50%; bottom: 54px; transform: translateX(-50%);
+      display: none; z-index: 8; border: 1px solid rgba(220,240,190,.5); border-radius: 999px;
+      padding: 12px 24px; color: #f2f7e8; background: rgba(25,48,26,.88);
+      font: 600 15px "Microsoft YaHei", sans-serif; letter-spacing: .08em;
+      box-shadow: 0 8px 26px rgba(0,0,0,.32); touch-action: manipulation; }
+    #enterBtn:active { background: rgba(60,86,43,.96); }
+    @media (max-width: 700px) {
+      #hud { left: 10px; top: 10px; padding: 8px 11px; font-size: 11px; }
+      #hud .t { margin-bottom: 2px; }
+      #dbg { display: none; }
+      #enterBtn { bottom: 34px; }
+    }
   </style>
 </head>
 <body>
@@ -48,7 +60,9 @@
     <div class="t">操 作</div>
     <div><b>W A S D</b> 行走 · <b>Shift</b> 奔跑</div>
     <div><b>鼠标拖动</b> 环视 · <b>滚轮</b> 远近</div>
+    <div><b>E / 门口按钮</b> 进入或离开小屋</div>
   </div>
+  <button id="enterBtn" type="button">进入小屋</button>
   <div id="stat"></div>
   <div id="dbg"></div>
   <div id="err"></div>
@@ -87,9 +101,10 @@
     import { RoomEnvironment } from './vendor/three/environments/RoomEnvironment.js';
 
     // ==================== 世界参数 ====================
-    const WORLD_RADIUS = 52;      // 世界收小，同样实例数换来更高丛林密度
-    const HOUSE_HEIGHT = 13;      // 房子放大（人 1.35m，房 13m）
-    const HERO_HEIGHT = 1.35;
+    const WORLD_RADIUS = 52;
+    const HOUSE_WIDTH = 8;
+    const HOUSE_DEPTH = 7;
+    const HERO_HEIGHT = 1.15;
     const WALK_SPEED = 3.3;
     const RUN_SPEED = 7.0;
 
@@ -108,7 +123,7 @@
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.96;
+    renderer.toneMappingExposure = 0.90;
     document.body.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
@@ -224,17 +239,19 @@
     const J = './assets/jungle/';
     // 真实扫描植被（CC0，Poly Haven，去塑料感）
     const ASSETS = [
-      { key: 'canopy', url: J + 'shrub_04/shrub_04_1k.gltf',              label: '树冠模板…' },
-      { key: 'shrub3', url: J + 'shrub_03/shrub_03_1k.gltf',               label: '灌木…' },
-      { key: 'fern',   url: J + 'fern_02/fern_02_1k.gltf',                 label: '蕨类…' },
-      { key: 'grass',  url: J + 'grass_medium_02/grass_medium_02_1k.gltf', label: '草丛…' },
+      { key: 'canopy', url: J + 'shrub_04/shrub_04_lod.glb',               label: '阔叶灌木…' },
+      { key: 'shrub3', url: J + 'shrub_03/shrub_03_lod.glb',               label: '灌木…' },
+      { key: 'fern',   url: J + 'fern_02/fern_02_lod.glb',                 label: '蕨类…' },
+      { key: 'grass',  url: J + 'grass_medium_02/grass_medium_02_lod.glb', label: '草丛…' },
       { key: 'rock1',  url: J + 'rock_07/rock_07_1k.gltf',                 label: '岩石…' },
       { key: 'rock2',  url: J + 'rock_09/rock_09_1k.gltf',                 label: '岩石…' },
       { key: 'moss',   url: J + 'moss_01/moss_01_1k.gltf',                 label: '苔藓…' },
-      { key: 'house',  url: './assets/aeris-house-lite.glb',               label: '生态别墅…' },
+      { key: 'house',  url: './assets/cabin/cabin_exterior.glb',            label: '落地木屋…' },
+      { key: 'interior', url: './assets/cabin/cabin_interior.glb',          label: '木屋室内…' },
+      { key: 'tree',   url: J + 'island_tree_02/island_tree_02_lod.glb',   label: '热带乔木…' },
       { key: 'hero',   url: J + 'Soldier.glb',                             label: '角色…' },
     ];
-    total = ASSETS.length + 2;
+    total = ASSETS.length + 1;
 
     // ==================== 通用材质处理 ====================
     function tuneMaterials(root, opts = {}) {
@@ -251,6 +268,29 @@
             m.roughness = Math.min(1, (m.roughness === undefined ? 0.9 : m.roughness) * 1.02 + 0.03);
           }
         }
+      });
+    }
+
+    function prepareFoliage(root, tint, leafOnly = false) {
+      root.traverse(o => {
+        if (!o.isMesh) return;
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        const clones = mats.map(m => {
+          const c = m.clone();
+          const isLeaf = /leaf|leaves|foliage/i.test(c.name || '');
+          if (!leafOnly || isLeaf) c.color.set(tint);
+          c.envMapIntensity = 0.38;
+          c.roughness = 0.94;
+          if (c.transparent || c.alphaTest > 0 || (leafOnly && isLeaf)) {
+            c.transparent = false;
+            c.alphaTest = isLeaf ? 0.32 : Math.max(c.alphaTest || 0, 0.2);
+            c.depthWrite = true;
+          }
+          return c;
+        });
+        o.material = Array.isArray(o.material) ? clones : clones[0];
+        o.castShadow = false;
+        o.receiveShadow = true;
       });
     }
 
@@ -298,7 +338,7 @@
         normalMap: nor || null,
         roughnessMap: rough || null,
         roughness: 1, metalness: 0,
-        vertexColors: true, color: 0xffffff,
+        vertexColors: true, color: 0xa2b885,
       });
       if (nor) mat.normalScale = new THREE.Vector2(0.7, 0.7);
 
@@ -308,42 +348,89 @@
       scene.add(m);
     }
 
-    // ==================== 房屋 ====================
-    // 可进入式碰撞：每栋房子记录局部半宽/半深 + 朝向，碰撞按「四面墙 + 正面门洞」计算
+    // ==================== 落地木屋 + 独立室内 ====================
     const houseColliders = [];
-    const HOUSE_WALL = 0.45;     // 墙厚（米）
-    const HOUSE_DOOR = 3.0;      // 门洞宽（米）
-    function placeHouses(template) {
+    const HOUSE_WALL = 0.24;
+    let activeHouse = null, nearbyHouse = null;
+    const enterBtn = document.getElementById('enterBtn');
+
+    function housePoint(h, lx, lz) {
+      return {
+        x: h.cx + h.cos * lx + h.sin * lz,
+        z: h.cz - h.sin * lx + h.cos * lz,
+      };
+    }
+    function placeHouses(exteriorTemplate, interiorTemplate) {
       HOUSE_SPOTS.forEach((p, index) => {
-        const h = template.clone();
-        h.name = 'JungleHouse_' + (index + 1);
-        const b0 = new THREE.Box3().setFromObject(h);
-        const s0 = new THREE.Vector3(); b0.getSize(s0);
-        const c0 = new THREE.Vector3(); b0.getCenter(c0);
-        const k = (HOUSE_HEIGHT / s0.y) * p.s;
-        h.scale.multiplyScalar(k);
-        h.rotation.y = p.rot;
-        h.position.set(p.x, 0, p.z);
-        const box = new THREE.Box3().setFromObject(h);
-        // 不再悬浮：把底部底座埋入地下（房高的 7%），让房子真正落在地面上
-        h.position.y = -box.min.y - HOUSE_HEIGHT * p.s * 0.07 + 0.02;
-        tuneMaterials(h, { env: 0.6 });
-        scene.add(h);
+        const floorY = terrainHeight(p.x, p.z) + 0.02;
+        const exterior = exteriorTemplate.clone(true);
+        exterior.name = 'JungleHouse_' + (index + 1);
+        exterior.scale.setScalar(p.s);
+        exterior.rotation.y = p.rot;
+        exterior.position.set(p.x, floorY, p.z);
+        tuneMaterials(exterior, { env: 0.6 });
+        scene.add(exterior);
+
+        const interior = interiorTemplate.clone(true);
+        interior.name = 'JungleInterior_' + (index + 1);
+        interior.scale.setScalar(p.s);
+        interior.rotation.y = p.rot;
+        interior.position.set(p.x, floorY, p.z);
+        interior.visible = false;
+        tuneMaterials(interior, { env: 0.35 });
+        scene.add(interior);
+
+        const lightPos = housePoint({ cx: p.x, cz: p.z, cos: Math.cos(p.rot), sin: Math.sin(p.rot) }, 0, 0);
+        const light = new THREE.PointLight(0xffd39a, 32, 13, 2);
+        light.position.set(lightPos.x, floorY + 2.9 * p.s, lightPos.z);
+        light.visible = false;
+        scene.add(light);
+
+        const door = housePoint({ cx: p.x, cz: p.z, cos: Math.cos(p.rot), sin: Math.sin(p.rot) }, 0, (HOUSE_DEPTH / 2 + 0.85) * p.s);
         houseColliders.push({
-          cx: p.x, cz: p.z,
-          hw: s0.x * k / 2, hd: s0.z * k / 2,
-          lcx: c0.x * k, lcz: c0.z * k,   // 模型局部中心偏移
-          cos: Math.cos(p.rot), sin: Math.sin(p.rot),
-          floorY: h.position.y,
+          cx: p.x, cz: p.z, rot: p.rot, scale: p.s,
+          hw: HOUSE_WIDTH * p.s / 2, hd: HOUSE_DEPTH * p.s / 2,
+          wall: HOUSE_WALL * p.s,
+          cos: Math.cos(p.rot), sin: Math.sin(p.rot), floorY,
+          exterior, interior, light, doorX: door.x, doorZ: door.z,
+          obstacles: [
+            { x: 1.45, z: -0.55, hw: 1.16, hd: 0.73 },
+            { x: -2.22, z: -1.55, hw: 1.18, hd: 1.54 },
+            { x: 1.65, z: -3.0, hw: 1.35, hd: 0.38 },
+          ],
         });
       });
     }
+    function toggleHouse() {
+      if (!nearbyHouse || !player) return;
+      const h = nearbyHouse;
+      const entering = activeHouse !== h;
+      if (activeHouse) {
+        activeHouse.exterior.visible = true;
+        activeHouse.interior.visible = false;
+        activeHouse.light.visible = false;
+      }
+      activeHouse = entering ? h : null;
+      h.exterior.visible = !entering;
+      h.interior.visible = entering;
+      h.light.visible = entering;
+      const localZ = entering ? 1.40 : (HOUSE_DEPTH / 2 + 1.35) * h.scale;
+      const pos = housePoint(h, 0, localZ);
+      player.position.set(pos.x, entering ? h.floorY + 0.13 * h.scale : terrainHeight(pos.x, pos.z), pos.z);
+      playerYaw = entering ? h.rot + Math.PI : h.rot;
+      camYaw = playerYaw;
+      camPitch = entering ? 0.10 : 0.20;
+      camDist = entering ? 2.25 : 8.0;
+      nearbyHouse = null;
+      enterBtn.style.display = 'none';
+    }
+    enterBtn.addEventListener('click', toggleHouse);
 
     // ==================== 散布 ====================
     const trunkColliders = [];
     function blockedByWorld(x, z, clearance) {
-      for (const p of HOUSE_SPOTS) if (Math.hypot(x - p.x, z - p.z) < p.clear + clearance) return true;
-      if (Math.hypot(x, z) < 3.5 + clearance) return true;
+      for (const p of HOUSE_SPOTS) if (Math.hypot(x - p.x, z - p.z) < 7.4 * p.s + clearance) return true;
+      if (Math.hypot(x, z - 7) < 2.8 + clearance) return true;
       return false;
     }
     function nearTrunk(x, z, d) {
@@ -377,8 +464,7 @@
       }
     }
 
-    // ==================== 组合乔木（真实灌木树冠 + 真实木纹树干，InstancedMesh 省 tris） ====================
-    const TREE_COUNT = 18;
+    // ==================== 完整扫描乔木（树干、分枝、树叶保持原始结构） ====================
     const TREE_SPOTS = [
       { x: -9,  z: -7,  h: 11.5 }, { x: 13,  z: 7,   h: 10.2 },
       { x: -16, z: 13,  h: 12.4 }, { x: 17,  z: -9,  h: 9.6 },
@@ -397,100 +483,78 @@
       { x: 24,  z: 10,  h: 11.8 }, { x: -24, z: -8,  h: 10.0 },
       { x: 6,   z: 50,  h: 11.4 }, { x: -8,  z: -32, h: 10.8 },
     ];
-    // 世界半径 76→52：树位等比内缩，同样树数密度翻倍
     for (const t of TREE_SPOTS) { t.x *= 0.68; t.z *= 0.68; }
-    // 补近景树（避开四栋房子的空地）
     TREE_SPOTS.push(
       { x: 7,   z: -6,  h: 12.5 }, { x: -8,  z: 9,   h: 11.0 },
       { x: 14,  z: 10,  h: 12.0 }, { x: -9,  z: -4,  h: 10.6 },
       { x: 4,   z: -16, h: 11.8 }, { x: -6,  z: 8,   h: 12.2 },
       { x: 18,  z: 2,   h: 10.4 }, { x: -15, z: -1,  h: 11.2 },
     );
-
-    // 树干（普通 mesh，实例化没意义因为几何都不同粗细）
-    function buildTrunk(woodTex, x, z, height) {
-      const trunkH = height * 0.62;
-      const rTop = height * 0.030, rBot = height * 0.058;
-      const tGeo = new THREE.CylinderGeometry(rTop, rBot, trunkH, 12, 3, true);
-      const tMat = new THREE.MeshStandardMaterial({
-        map: woodTex, color: 0xb0a08c, roughness: 0.95, metalness: 0, side: THREE.DoubleSide,
-      });
-      const trunk = new THREE.Mesh(tGeo, tMat);
-      trunk.position.set(x, terrainHeight(x, z) + trunkH / 2, z);
-      trunk.castShadow = true; trunk.receiveShadow = true;
-      scene.add(trunk);
-      trunkColliders.push({ x, z, r: rBot + 0.3 });
+    // 房屋、门口与出生视野保留空地，外围补足成片密林
+    for (let i = TREE_SPOTS.length - 1; i >= 0; i--) {
+      const t = TREE_SPOTS[i];
+      const nearHouse = HOUSE_SPOTS.some(p => Math.hypot(t.x - p.x, t.z - p.z) < 7.4);
+      const blocksView = t.z > 5 && t.z < 20 && Math.abs(t.x - 2) < 4.6;
+      if (nearHouse || blocksView || Math.hypot(t.x, t.z - 7) < 4.5) TREE_SPOTS.splice(i, 1);
+    }
+    let treeTries = 0;
+    while (TREE_SPOTS.length < 72 && treeTries++ < 1600) {
+      const a = rng() * Math.PI * 2;
+      const r = 16 + rng() * 38;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (HOUSE_SPOTS.some(p => Math.hypot(x - p.x, z - p.z) < 8.0)) continue;
+      if (TREE_SPOTS.some(t => Math.hypot(x - t.x, z - t.z) < 3.8)) continue;
+      TREE_SPOTS.push({ x, z, h: 9.5 + rng() * 3.8 });
     }
 
-    // 树冠 InstancedMesh：模板 shrub1.scene 有 M 个 mesh → 每个 mesh × 3 个树冠块 = 3M 个 InstancedMesh
-    // 每个 InstancedMesh 有 N 个实例（= 树的数量）。这样 shrub1 的 156K tris 只算一次。
-    // 树冠：6 块真实灌木拼成饱满球状冠（1 块顶冠 + 5 块环绕），位于树干顶端
-    const CANOPY_BLOCKS = 6;
-    let CANOPY_INST = []; // CANOPY_INST[k][m] = InstancedMesh（k=树冠块, m=模板 mesh）
-    const CANOPY_DUMMY = new THREE.Object3D();
-    function buildCanopyInstances(canopyTpl) {
-      canopyTpl.updateMatrixWorld(true);
+    function buildTrees(treeTemplate) {
+      const tpl = treeTemplate.clone(true);
+      prepareFoliage(tpl, 0xc2d3a6, true);
+      tpl.updateMatrixWorld(true);
       const tplMeshes = [];
-      canopyTpl.traverse(o => { if (o.isMesh && o.geometry && o.material) tplMeshes.push(o); });
-      const N = TREE_SPOTS.length;
-      CANOPY_INST = [];
-      for (let k = 0; k < CANOPY_BLOCKS; k++) {
-        const arr = [];
-        for (const tplMesh of tplMeshes) {
-          const im = new THREE.InstancedMesh(tplMesh.geometry, tplMesh.material, N);
-          im.castShadow = false; im.receiveShadow = true;
-          scene.add(im);
-          arr.push(im);
-        }
-        CANOPY_INST.push(arr);
-      }
-      CANOPY_INST.__tplMeshes = tplMeshes;
-      const bb = new THREE.Box3().setFromObject(canopyTpl);
-      CANOPY_INST.__y0 = bb.min.y;
-      CANOPY_INST.__h = (bb.max.y - bb.min.y) || 1;
-    }
-    function placeCanopyInstances() {
-      const tplMeshes = CANOPY_INST.__tplMeshes;
-      const tplY0 = CANOPY_INST.__y0, tplH = CANOPY_INST.__h;
+      tpl.traverse(o => { if (o.isMesh && o.geometry && o.material) tplMeshes.push(o); });
+      const bbox = new THREE.Box3().setFromObject(tpl);
+      const size = new THREE.Vector3(); bbox.getSize(size);
+      const templateH = size.y || 1;
+      const normalization = new THREE.Matrix4()
+        .makeTranslation(0, -bbox.min.y / templateH, 0)
+        .multiply(new THREE.Matrix4().makeScale(1 / templateH, 1 / templateH, 1 / templateH));
+      const dummy = new THREE.Object3D();
       const tmpMat = new THREE.Matrix4();
-      for (let ti = 0; ti < TREE_SPOTS.length; ti++) {
-        const { x, z, h: height } = TREE_SPOTS[ti];
-        const trunkH = height * 0.62;
-        const groundY = terrainHeight(x, z) - 0.06;
-        for (let k = 0; k < CANOPY_BLOCKS; k++) {
-          let targetH, lx, lz, ly;
-          if (k === 0) {
-            // 顶冠：最大的一块，扣在树干顶端
-            targetH = height * 0.44;
-            lx = 0; lz = 0;
-            ly = trunkH * 0.99;
-          } else {
-            // 5 块环绕：均匀分布 + 随机抖动，形成饱满冠幅
-            const ang = (k - 1) / (CANOPY_BLOCKS - 1) * Math.PI * 2 + rng() * 0.5;
-            const rad = height * (0.14 + rng() * 0.06);
-            targetH = height * (0.32 + rng() * 0.10);
-            lx = Math.cos(ang) * rad;
-            lz = Math.sin(ang) * rad;
-            ly = trunkH * (0.80 + rng() * 0.16);
-          }
-          const scaleY = targetH / tplH;
-          CANOPY_DUMMY.position.set(x + lx, groundY + ly - tplY0 * scaleY, z + lz);
-          CANOPY_DUMMY.scale.setScalar(scaleY);
-          CANOPY_DUMMY.rotation.set(0, rng() * Math.PI * 2, 0);
-          CANOPY_DUMMY.updateMatrix();
-          for (let m = 0; m < tplMeshes.length; m++) {
-            tmpMat.multiplyMatrices(CANOPY_DUMMY.matrix, tplMeshes[m].matrixWorld);
-            CANOPY_INST[k][m].setMatrixAt(ti, tmpMat);
-          }
+      const ims = tplMeshes.map(mesh => {
+        const leaf = /leaf|leaves|foliage/i.test(mesh.material.name || '');
+        const trunk = (mesh.material.name || '') === 'island_tree_02';
+        const im = new THREE.InstancedMesh(mesh.geometry, mesh.material, TREE_SPOTS.length);
+        im.castShadow = trunk;
+        im.receiveShadow = true;
+        im.userData.isLeaf = leaf;
+        scene.add(im);
+        return im;
+      });
+      for (let i = 0; i < TREE_SPOTS.length; i++) {
+        const { x, z, h } = TREE_SPOTS[i];
+        const width = 0.64 + rng() * 0.14;
+        dummy.position.set(x, terrainHeight(x, z) - 0.035, z);
+        dummy.rotation.set(0, rng() * Math.PI * 2, 0);
+        dummy.scale.set(h * width, h, h * width);
+        dummy.updateMatrix();
+        for (let m = 0; m < ims.length; m++) {
+          tmpMat.multiplyMatrices(dummy.matrix, normalization).multiply(tplMeshes[m].matrixWorld);
+          ims[m].setMatrixAt(i, tmpMat);
         }
+        trunkColliders.push({ x, z, r: 0.18 + h * width * 0.045 });
       }
-      for (let k = 0; k < CANOPY_BLOCKS; k++) for (const im of CANOPY_INST[k]) im.instanceMatrix.needsUpdate = true;
+      for (const im of ims) {
+        im.instanceMatrix.needsUpdate = true;
+        im.computeBoundingSphere();
+      }
     }
     // 散布也用 InstancedMesh（shrub1/3/4/fern/grass/moss/rock1/rock2 都各自实例化）
     const SCAT_INST = []; // 每个元素 { ims:[InstancedMesh], list:[{x,z,h,ry,s}], template }
     function scatterInstanced(template, opts) {
       const { count, scaleMin = 1, scaleMax = 1, clearance = 0,
-              radiusMin = 7, radiusMax = WORLD_RADIUS - 5, castShadow = false, sink = 0 } = opts;
+              radiusMin = 7, radiusMax = WORLD_RADIUS - 5, castShadow = false,
+              sink = 0, clusterChance = 0 } = opts;
       // 收集模板 mesh，并计算各自局部矩阵（否则多部件植被会被压到同一原点而变形）
       template.updateMatrixWorld(true);
       const tplMeshes = [];
@@ -507,14 +571,25 @@
       const tmpMat = new THREE.Matrix4();
       const bbox = new THREE.Box3().setFromObject(template);
       const bs = new THREE.Vector3(); bbox.getSize(bs);
-      const bY0 = bbox.min.y, bY1 = bbox.max.y;
+      const bY0 = bbox.min.y;
       if (bs.y < 0.0001) { return { ims, placed: 0 }; }
       let placed = 0, tries = 0, maxTries = count * 70;
       while (placed < count && tries < maxTries) {
         tries++;
-        const a = rng() * Math.PI * 2;
-        const r = radiusMin + Math.sqrt(rng()) * (radiusMax - radiusMin);
-        const x = Math.cos(a) * r, z = Math.sin(a) * r;
+        let x, z;
+        if (trunkColliders.length && rng() < clusterChance) {
+          const tree = trunkColliders[Math.floor(rng() * trunkColliders.length)];
+          const a = rng() * Math.PI * 2;
+          const r = 1.4 + Math.sqrt(rng()) * 5.8;
+          x = tree.x + Math.cos(a) * r;
+          z = tree.z + Math.sin(a) * r;
+          if (Math.hypot(x, z) > WORLD_RADIUS - 3) continue;
+        } else {
+          const a = rng() * Math.PI * 2;
+          const r = radiusMin + Math.sqrt(rng()) * (radiusMax - radiusMin);
+          x = Math.cos(a) * r;
+          z = Math.sin(a) * r;
+        }
         if (blockedByWorld(x, z, clearance)) continue;
         const s = scaleMin + rng() * (scaleMax - scaleMin);
         dummy.position.set(x, terrainHeight(x, z) - sink - bY0 * s, z);
@@ -527,7 +602,11 @@
         }
         placed++;
       }
-      for (const im of ims) im.instanceMatrix.needsUpdate = true;
+      for (const im of ims) {
+        im.count = placed;
+        im.instanceMatrix.needsUpdate = true;
+        im.computeBoundingSphere();
+      }
       return { ims, placed };
     }
 
@@ -561,7 +640,13 @@
       player = new THREE.Group();
       player.add(hero);
       scene.add(player);
-      player.position.set(0, terrainHeight(0, 3), 3);
+      player.position.set(0, terrainHeight(0, 7), 7);
+      camera.position.set(
+        player.position.x - Math.sin(camYaw) * camDist,
+        player.position.y + 3.0,
+        player.position.z - Math.cos(camYaw) * camDist
+      );
+      camera.lookAt(player.position.x, player.position.y + 1.0, player.position.z);
 
       mixer = new THREE.AnimationMixer(hero);
       for (const clip of gltf.animations) {
@@ -659,11 +744,12 @@
     const keys = {};
     addEventListener('keydown', e => {
       keys[e.code] = true;
+      if (e.code === 'KeyE' && !e.repeat) toggleHouse();
       if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
     });
     addEventListener('keyup', e => { keys[e.code] = false; });
 
-    let camYaw = 2.25, camPitch = 0.18, camDist = 8.5;
+    let camYaw = 0.08, camPitch = 0.22, camDist = 9.5;
     let dragging = false, lastX = 0, lastY = 0;
     renderer.domElement.addEventListener('pointerdown', e => { dragging = true; lastX = e.clientX; lastY = e.clientY; });
     addEventListener('pointerup', () => { dragging = false; });
@@ -675,7 +761,9 @@
       lastX = e.clientX; lastY = e.clientY;
     });
     addEventListener('wheel', e => {
-      camDist = Math.max(2.6, Math.min(14, camDist + e.deltaY * 0.006));
+      const minDist = activeHouse ? 1.35 : 3.2;
+      const maxDist = activeHouse ? 3.1 : 14;
+      camDist = Math.max(minDist, Math.min(maxDist, camDist + e.deltaY * 0.006));
     }, { passive: true });
     addEventListener('resize', () => {
       camera.aspect = innerWidth / innerHeight;
@@ -684,34 +772,41 @@
     });
 
     // ==================== 碰撞 ====================
-    const PLAYER_RADIUS = 0.32;
+    const PLAYER_RADIUS = 0.25;
     function resolveCollisions(p) {
       const pr = PLAYER_RADIUS;
       for (const h of houseColliders) {
         const dx = p.x - h.cx, dz = p.z - h.cz;
-        // 世界 → 房子局部（逆旋转，再减模型中心偏移）
-        let lx = h.cos * dx - h.sin * dz - h.lcx;
-        let lz = h.sin * dx + h.cos * dz - h.lcz;
-        const HW = h.hw, HD = h.hd, T = HOUSE_WALL;
-        if (Math.abs(lx) > HW + pr || Math.abs(lz) > HD + pr) continue;   // 离房子还远
-        if (Math.abs(lx) < HW - T - pr && Math.abs(lz) < HD - T - pr) continue; // 已在室内，自由走动
-        // 门洞：房子局部 z = +HD 这面墙的中央，人可以进出
-        if (Math.abs(lx) < HOUSE_DOOR / 2 && lz > HD - T - pr - 0.3) continue;
-        // 位于墙体区域 → 推到最近的安全面（室内侧或室外侧）
-        const cand = [
-          [HW + pr, lz], [-HW - pr, lz], [lx, HD + pr], [lx, -HD - pr],
-          [HW - T - pr, lz], [-HW + T + pr, lz], [lx, HD - T - pr], [lx, -HD + T + pr],
-        ];
-        let bx = lx, bz = lz, bd = Infinity;
-        for (const c of cand) {
-          const d = (c[0] - lx) * (c[0] - lx) + (c[1] - lz) * (c[1] - lz);
-          if (d < bd) { bd = d; bx = c[0]; bz = c[1]; }
+        let lx = h.cos * dx - h.sin * dz;
+        let lz = h.sin * dx + h.cos * dz;
+        if (activeHouse === h) {
+          // 独立室内：限制在墙内，门口通过 E/按钮切换，不允许穿墙走出去
+          const ix = h.hw - h.wall - pr, iz = h.hd - h.wall - pr;
+          lx = Math.max(-ix, Math.min(ix, lx));
+          lz = Math.max(-iz, Math.min(iz, lz));
+          for (const o of h.obstacles) {
+            const ox = o.x * h.scale, oz = o.z * h.scale;
+            const hw = o.hw * h.scale + pr, hd = o.hd * h.scale + pr;
+            const dxo = lx - ox, dzo = lz - oz;
+            if (Math.abs(dxo) >= hw || Math.abs(dzo) >= hd) continue;
+            const pushX = hw - Math.abs(dxo), pushZ = hd - Math.abs(dzo);
+            if (pushX < pushZ) lx = ox + Math.sign(dxo || 1) * hw;
+            else lz = oz + Math.sign(dzo || 1) * hd;
+          }
+          const w = housePoint(h, lx, lz);
+          p.x = w.x; p.z = w.z;
+        } else {
+          // 外部木屋是实心墙体；只有在门口交互后才会切换到独立室内
+          if (Math.abs(lx) > h.hw + pr || Math.abs(lz) > h.hd + pr) continue;
+          const pushX = h.hw + pr - Math.abs(lx);
+          const pushZ = h.hd + pr - Math.abs(lz);
+          if (pushX < pushZ) lx = Math.sign(lx || 1) * (h.hw + pr);
+          else lz = Math.sign(lz || 1) * (h.hd + pr);
+          const w = housePoint(h, lx, lz);
+          p.x = w.x; p.z = w.z;
         }
-        const wx = bx + h.lcx, wz = bz + h.lcz;
-        p.x = h.cx + h.cos * wx + h.sin * wz;
-        p.z = h.cz - h.sin * wx + h.cos * wz;
       }
-      for (const t of trunkColliders) {
+      if (!activeHouse) for (const t of trunkColliders) {
         const dx = p.x - t.x, dz = p.z - t.z;
         const d = Math.hypot(dx, dz);
         const min = t.r + PLAYER_RADIUS;
@@ -722,6 +817,24 @@
       }
       const d = Math.hypot(p.x, p.z);
       if (d > WORLD_RADIUS) { p.x *= WORLD_RADIUS / d; p.z *= WORLD_RADIUS / d; }
+    }
+
+    function updateInteraction() {
+      nearbyHouse = null;
+      if (activeHouse) {
+        const dx = player.position.x - activeHouse.cx, dz = player.position.z - activeHouse.cz;
+        const lx = activeHouse.cos * dx - activeHouse.sin * dz;
+        const lz = activeHouse.sin * dx + activeHouse.cos * dz;
+        if (Math.abs(lx) < 1.65 * activeHouse.scale && lz > 1.75 * activeHouse.scale) nearbyHouse = activeHouse;
+      } else {
+        let best = 2.35;
+        for (const h of houseColliders) {
+          const d = Math.hypot(player.position.x - h.doorX, player.position.z - h.doorZ);
+          if (d < best) { best = d; nearbyHouse = h; }
+        }
+      }
+      enterBtn.style.display = nearbyHouse ? 'block' : 'none';
+      if (nearbyHouse) enterBtn.textContent = activeHouse ? '走出小屋' : '进入小屋';
     }
 
     // ==================== 主循环 ====================
@@ -756,7 +869,10 @@
           resolveCollisions(player.position);
           playerYaw = Math.atan2(mx, mz);
         }
-        player.position.y = terrainHeight(player.position.x, player.position.z);
+        player.position.y = activeHouse
+          ? activeHouse.floorY + 0.13 * activeHouse.scale
+          : terrainHeight(player.position.x, player.position.z);
+        updateInteraction();
 
         let diff = playerYaw + heroYawOffset - player.rotation.y;
         while (diff > Math.PI) diff -= Math.PI * 2;
@@ -780,13 +896,27 @@
         const cp = Math.cos(camPitch), sp = Math.sin(camPitch);
         camTarget.set(
           player.position.x - Math.sin(camYaw) * cp * camDist,
-          player.position.y + 1.05 + sp * camDist,
+          player.position.y + (activeHouse ? 0.78 : 0.95) + sp * camDist,
           player.position.z - Math.cos(camYaw) * cp * camDist
         );
-        camera.position.lerp(camTarget, Math.min(1, dt * 9));
-        const minY = terrainHeight(camera.position.x, camera.position.z) + 0.55;
-        if (camera.position.y < minY) camera.position.y = minY;
-        camera.lookAt(player.position.x, player.position.y + 1.4, player.position.z);
+        if (activeHouse) {
+          // 第三人称镜头也留在室内，避免隔墙看到外部或整面墙
+          const h = activeHouse;
+          const dx = camTarget.x - h.cx, dz = camTarget.z - h.cz;
+          let lx = h.cos * dx - h.sin * dz;
+          let lz = h.sin * dx + h.cos * dz;
+          lx = Math.max(-h.hw + 0.38, Math.min(h.hw - 0.38, lx));
+          lz = Math.max(-h.hd + 0.38, Math.min(h.hd - 0.38, lz));
+          const w = housePoint(h, lx, lz);
+          camTarget.x = w.x; camTarget.z = w.z;
+          camTarget.y = Math.max(h.floorY + 0.48, Math.min(h.floorY + 3.65 * h.scale, camTarget.y));
+          camera.position.copy(camTarget);
+        } else {
+          camera.position.lerp(camTarget, Math.min(1, dt * 9));
+          const minY = terrainHeight(camera.position.x, camera.position.z) + 0.55;
+          if (camera.position.y < minY) camera.position.y = minY;
+        }
+        camera.lookAt(player.position.x, player.position.y + (activeHouse ? 0.88 : 1.05), player.position.z);
       }
 
       renderer.render(scene, camera);
@@ -828,14 +958,6 @@
         ]);
         tick('地表…');
 
-        const woodTex = await safeTex(J + 'root_cluster_01/textures/root_cluster_01_diff_1k.jpg');
-        if (woodTex) {
-          woodTex.wrapS = woodTex.wrapT = THREE.RepeatWrapping;
-          woodTex.repeat.set(2, 4);
-          woodTex.colorSpace = THREE.SRGBColorSpace;
-        }
-        tick('木质…');
-
         const R = {};
         await Promise.all(ASSETS.map(async a => { R[a.key] = await loadGLTF(a.url, a.label); }));
 
@@ -843,43 +965,32 @@
         stage('地面');
         buildGround(gDiff, gNor, gRough);
         stage('房屋');
-        placeHouses(R.house.scene);
+        placeHouses(R.house.scene, R.interior.scene);
         stage('树木');
 
-        // 树冠模板改用 shrub_03（8287 面/块）：6 块 × 40 棵树约 200 万面，浓密又不爆显存
-        const canopyTpl = R.shrub3.scene.clone(true);
-        tuneMaterials(canopyTpl, { cast: false });
-        for (const t of TREE_SPOTS) buildTrunk(woodTex, t.x, t.z, t.h);
-        buildCanopyInstances(canopyTpl);
-        placeCanopyInstances();
+        buildTrees(R.tree.scene);
 
         stage('植被');
 
-        // 地被：InstancedMesh 实例化，各模板 mesh 只算一次 tris
-        // 地被：InstancedMesh 实例化
-        // 预算约 690 万面：植被用「少而大」策略，兼顾密度与手机帧率
-        scatterInstanced(R.canopy.scene, { count: 26, scaleMin: 0.9, scaleMax: 1.9, clearance: 0.5, radiusMax: 40 });
-        scatterInstanced(R.shrub3.scene, { count: 150, scaleMin: 1.0, scaleMax: 2.3, clearance: 0.3, radiusMax: 42 });
-        scatterInstanced(R.fern.scene,    { count: 170, scaleMin: 1.0, scaleMax: 2.2, clearance: 0.2, radiusMin: 3.0, radiusMax: 42 });
-        scatterInstanced(R.grass.scene,   { count: 240, scaleMin: 1.2, scaleMax: 2.8, clearance: 0.15, radiusMin: 2.5, radiusMax: 40 });
-        scatterInstanced(R.moss.scene,    { count: 60, scaleMin: 1.0, scaleMax: 2.2, clearance: 0.2, sink: 0.05, radiusMax: 42 });
+        // 乔木下形成灌木层，蕨类与草丛填空隙；房屋和村口仍保留清晰通路
+        prepareFoliage(R.canopy.scene, 0xb9cc9c);
+        prepareFoliage(R.shrub3.scene, 0xb5c998);
+        prepareFoliage(R.fern.scene, 0xa9c58e);
+        prepareFoliage(R.grass.scene, 0xb6cb96);
+        prepareFoliage(R.moss.scene, 0xa9bd87);
+        scatterInstanced(R.canopy.scene, { count: 48, scaleMin: 2.0, scaleMax: 3.6, clearance: 0.5, radiusMax: 46, clusterChance: 0.8 });
+        scatterInstanced(R.shrub3.scene, { count: 280, scaleMin: 1.5, scaleMax: 3.0, clearance: 0.3, radiusMax: 48, clusterChance: 0.78 });
+        scatterInstanced(R.fern.scene,    { count: 240, scaleMin: 1.4, scaleMax: 2.6, clearance: 0.2, radiusMin: 3.0, radiusMax: 48, clusterChance: 0.7 });
+        scatterInstanced(R.grass.scene,   { count: 340, scaleMin: 1.6, scaleMax: 3.0, clearance: 0.15, radiusMin: 2.5, radiusMax: 47, clusterChance: 0.58 });
+        scatterInstanced(R.moss.scene,    { count: 70, scaleMin: 1.0, scaleMax: 2.2, clearance: 0.2, sink: 0.05, radiusMax: 44, clusterChance: 0.5 });
+        // 外围高灌木形成真实绿墙；不靠雾遮蔽空旷地平线
+        scatterInstanced(R.shrub3.scene,  { count: 140, scaleMin: 4.0, scaleMax: 6.5, clearance: 0.1, radiusMin: 34, radiusMax: 56, clusterChance: 0 });
 
         scatterInstanced(R.rock1.scene, { count: 14, scaleMin: 0.8, scaleMax: 1.9, clearance: 0.7, castShadow: true });
         scatterInstanced(R.rock2.scene, { count: 12, scaleMin: 0.7, scaleMax: 1.7, clearance: 0.7, castShadow: true });
 
         stage('角色');
         setupHero(R.hero);
-
-        stage('村民');
-        const NPC_SPOTS = [
-          { x: -11, z: -11 }, { x: 8, z: -14 }, { x: -6, z: 10 },
-          { x: 15, z: 18 }, { x: -22, z: 8 }, { x: 24, z: -22 },
-        ];
-        // 每个 NPC 用 Soldier.glb 独立克隆（共享几何材质，只多了 6 个 mesh 实例）
-        for (const p of NPC_SPOTS) {
-          const gl = { scene: R.hero.scene.clone(true), animations: R.hero.animations };
-          spawnNPC(gl, new THREE.Vector3(p.x, 0, p.z));
-        }
 
         // 先把已加载贴图上传到 GPU，避免遮罩消失后植被短暂白模
         stage('准备纹理');
@@ -917,8 +1028,12 @@
           camera, scene, renderer,
           get pos() { return player ? player.position.clone() : null; },
           get anim() { return currentAction ? currentAction.getClip().name : null; },
+          get inside() { return activeHouse ? activeHouse.exterior.name : null; },
+          get nearDoor() { return nearbyHouse ? nearbyHouse.exterior.name : null; },
+          get camState() { return { yaw: camYaw, pitch: camPitch, dist: camDist }; },
+          houses: houseColliders,
           setPos(x, z) { if (player) { player.position.x = x; player.position.z = z; } },
-          stats() { return { houses: houseColliders.length, trees: trunkColliders.length, fps: statEl.textContent }; },
+          stats() { return { houses: houseColliders.length, trees: trunkColliders.length, inside: activeHouse ? activeHouse.exterior.name : null, fps: statEl.textContent }; },
         };
 
         animate();
