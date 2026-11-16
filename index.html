@@ -67,10 +67,10 @@
       window.addEventListener('unhandledrejection', e => {
         show('[promise] ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
       });
-      // 标记脚本未执行
+      // 标记脚本未执行（首次加载 50MB 资产在手机上可能较慢，留足时间）
       setTimeout(() => {
         if (!window.__world) show('[诊断] 脚本尚未完成初始化（可能仍在加载资产或已报错）');
-      }, 45000);
+      }, 90000);
     })();
   </script>
 
@@ -271,10 +271,10 @@
         const g = smoothstep(-0.35, 0.55,
           Math.sin(px * 0.07) * Math.cos(pz * 0.055) * 0.75
           + (hashNoise(px * 0.014, pz * 0.014) - 0.5) * 1.1);
-        const tint = 1 - g * 0.45;                 // 苔绿斑块把红/蓝压低，绿色相对突出
-        colors[i * 3 + 0] = (0.86 + n * 0.26) * tint;
-        colors[i * 3 + 1] = (0.88 + n * 0.30) * (1 - g * 0.10);
-        colors[i * 3 + 2] = (0.82 + n * 0.24) * tint * 0.96;
+        const tint = 1 - g * 0.26;                 // 明暗/干湿斑块，打散平铺重复感
+        colors[i * 3 + 0] = (0.96 + n * 0.28) * tint;
+        colors[i * 3 + 1] = (1.00 + n * 0.30) * tint * 1.01;
+        colors[i * 3 + 2] = (0.93 + n * 0.26) * tint;
       }
       geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
       geo.computeVertexNormals();
@@ -764,11 +764,11 @@
           catch (e) { console.warn('贴图缺失，已跳过：', url); return null; }
         };
 
-        // 真实扫描地表（Poly Haven forest_ground_04，CC0 可平铺）
+        // 真实扫描地表（Poly Haven aerial_grass_rock，CC0 可平铺，苔草+碎石丛林地皮）
         const [gDiff, gNor, gRough] = await Promise.all([
-          safeTex(J + 'ground/forest_diff.jpg'),
-          safeTex(J + 'ground/forest_nor.jpg'),
-          safeTex(J + 'ground/forest_arm.jpg'),
+          safeTex(J + 'ground/agr_diff.jpg'),
+          safeTex(J + 'ground/agr_nor.jpg'),
+          safeTex(J + 'ground/agr_arm.jpg'),
         ]);
         tick('地表…');
 
