@@ -808,11 +808,12 @@
 
         // 地被：InstancedMesh 实例化，各模板 mesh 只算一次 tris
         // 地被：InstancedMesh 实例化
-        scatterInstanced(R.canopy.scene, { count: 70, scaleMin: 0.7, scaleMax: 1.6, clearance: 0.5, radiusMax: 60 });
-        scatterInstanced(R.shrub3.scene, { count: 190, scaleMin: 0.8, scaleMax: 1.9, clearance: 0.3, radiusMax: 50 });
-        scatterInstanced(R.fern.scene,    { count: 240, scaleMin: 0.8, scaleMax: 1.9, clearance: 0.2, radiusMin: 4.5, radiusMax: 48 });
-        scatterInstanced(R.grass.scene,   { count: 560, scaleMin: 0.9, scaleMax: 2.0, clearance: 0.15, radiusMin: 3.0, radiusMax: 42 });
-        scatterInstanced(R.moss.scene,    { count: 80, scaleMin: 0.9, scaleMax: 2.0, clearance: 0.2, sink: 0.05, radiusMax: 50 });
+        // 预算约 690 万面：植被用「少而大」策略，兼顾密度与手机帧率
+        scatterInstanced(R.canopy.scene, { count: 30, scaleMin: 0.9, scaleMax: 1.9, clearance: 0.5, radiusMax: 46 });
+        scatterInstanced(R.shrub3.scene, { count: 100, scaleMin: 1.0, scaleMax: 2.3, clearance: 0.3, radiusMax: 46 });
+        scatterInstanced(R.fern.scene,    { count: 130, scaleMin: 1.0, scaleMax: 2.2, clearance: 0.2, radiusMin: 4.0, radiusMax: 45 });
+        scatterInstanced(R.grass.scene,   { count: 180, scaleMin: 1.2, scaleMax: 2.8, clearance: 0.15, radiusMin: 3.0, radiusMax: 42 });
+        scatterInstanced(R.moss.scene,    { count: 50, scaleMin: 1.0, scaleMax: 2.2, clearance: 0.2, sink: 0.05, radiusMax: 46 });
 
         scatterInstanced(R.rock1.scene, { count: 14, scaleMin: 0.8, scaleMax: 1.9, clearance: 0.7, castShadow: true });
         scatterInstanced(R.rock2.scene, { count: 12, scaleMin: 0.7, scaleMax: 1.7, clearance: 0.7, castShadow: true });
