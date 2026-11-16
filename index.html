@@ -316,7 +316,7 @@
         const g = smoothstep(-0.35, 0.55,
           Math.sin(px * 0.07) * Math.cos(pz * 0.055) * 0.75
           + (hashNoise(px * 0.014, pz * 0.014) - 0.5) * 1.1);
-        const tint = 1 - g * 0.26;                 // 明暗/干湿斑块，打散平铺重复感
+        const tint = 1 - g * 0.34;                 // 明暗/干湿斑块，打散平铺重复感
         colors[i * 3 + 0] = (0.96 + n * 0.28) * tint;
         colors[i * 3 + 1] = (1.00 + n * 0.30) * tint * 1.01;
         colors[i * 3 + 2] = (0.93 + n * 0.26) * tint;
@@ -327,8 +327,8 @@
       for (const t of [diff, nor, rough]) {
         if (!t) continue;
         t.wrapS = t.wrapT = THREE.RepeatWrapping;
-        // 26 次重复 = 320 米地面每张约 12 米，颗粒细节够、重复感被顶点色打散
-        t.repeat.set(26, 26);
+        // 34 次重复 = 320 米地面每张约 9.4 米，颗粒细节够、重复感被顶点色打散
+        t.repeat.set(34, 34);
         t.anisotropy = renderer.capabilities.getMaxAnisotropy();
       }
       if (diff) diff.colorSpace = THREE.SRGBColorSpace;
@@ -338,7 +338,7 @@
         normalMap: nor || null,
         roughnessMap: rough || null,
         roughness: 1, metalness: 0,
-        vertexColors: true, color: 0xa2b885,
+        vertexColors: true, color: 0x8fa473,
       });
       if (nor) mat.normalScale = new THREE.Vector2(0.7, 0.7);
 
@@ -498,12 +498,12 @@
       if (nearHouse || blocksView || Math.hypot(t.x, t.z - 7) < 4.5) TREE_SPOTS.splice(i, 1);
     }
     let treeTries = 0;
-    while (TREE_SPOTS.length < 72 && treeTries++ < 1600) {
+    while (TREE_SPOTS.length < 88 && treeTries++ < 2200) {
       const a = rng() * Math.PI * 2;
-      const r = 16 + rng() * 38;
+      const r = 13 + rng() * 41;
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
       if (HOUSE_SPOTS.some(p => Math.hypot(x - p.x, z - p.z) < 8.0)) continue;
-      if (TREE_SPOTS.some(t => Math.hypot(x - t.x, z - t.z) < 3.8)) continue;
+      if (TREE_SPOTS.some(t => Math.hypot(x - t.x, z - t.z) < 3.2)) continue;
       TREE_SPOTS.push({ x, z, h: 9.5 + rng() * 3.8 });
     }
 
@@ -978,11 +978,11 @@
         prepareFoliage(R.fern.scene, 0xa9c58e);
         prepareFoliage(R.grass.scene, 0xb6cb96);
         prepareFoliage(R.moss.scene, 0xa9bd87);
-        scatterInstanced(R.canopy.scene, { count: 48, scaleMin: 2.0, scaleMax: 3.6, clearance: 0.5, radiusMax: 46, clusterChance: 0.8 });
-        scatterInstanced(R.shrub3.scene, { count: 280, scaleMin: 1.5, scaleMax: 3.0, clearance: 0.3, radiusMax: 48, clusterChance: 0.78 });
-        scatterInstanced(R.fern.scene,    { count: 240, scaleMin: 1.4, scaleMax: 2.6, clearance: 0.2, radiusMin: 3.0, radiusMax: 48, clusterChance: 0.7 });
-        scatterInstanced(R.grass.scene,   { count: 340, scaleMin: 1.6, scaleMax: 3.0, clearance: 0.15, radiusMin: 2.5, radiusMax: 47, clusterChance: 0.58 });
-        scatterInstanced(R.moss.scene,    { count: 70, scaleMin: 1.0, scaleMax: 2.2, clearance: 0.2, sink: 0.05, radiusMax: 44, clusterChance: 0.5 });
+        scatterInstanced(R.canopy.scene, { count: 80, scaleMin: 2.0, scaleMax: 3.6, clearance: 0.5, radiusMax: 46, clusterChance: 0.85 });
+        scatterInstanced(R.shrub3.scene, { count: 360, scaleMin: 1.5, scaleMax: 3.0, clearance: 0.3, radiusMax: 48, clusterChance: 0.8 });
+        scatterInstanced(R.fern.scene,    { count: 300, scaleMin: 1.4, scaleMax: 2.6, clearance: 0.2, radiusMin: 2.2, radiusMax: 48, clusterChance: 0.72 });
+        scatterInstanced(R.grass.scene,   { count: 440, scaleMin: 1.6, scaleMax: 3.0, clearance: 0.15, radiusMin: 2.0, radiusMax: 47, clusterChance: 0.6 });
+        scatterInstanced(R.moss.scene,    { count: 80, scaleMin: 1.0, scaleMax: 2.2, clearance: 0.2, sink: 0.05, radiusMax: 44, clusterChance: 0.5 });
         // 外围高灌木形成真实绿墙；不靠雾遮蔽空旷地平线
         scatterInstanced(R.shrub3.scene,  { count: 140, scaleMin: 4.0, scaleMax: 6.5, clearance: 0.1, radiusMin: 34, radiusMax: 56, clusterChance: 0 });
 
