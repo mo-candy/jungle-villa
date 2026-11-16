@@ -229,13 +229,24 @@
       document.title = '丛林村落 | 载入 ' + done + '/' + total;
     }
     function loadGLTF(url, label) {
-      return new Promise((res, rej) =>
-        loader.load(url, g => { tick(label); res(g); }, undefined,
-          e => rej(new Error(label + ' 加载失败')))
-      );
+      return new Promise((res, rej) => {
+        let left = 2;
+        const fail = () => {
+          if (left-- > 0) setTimeout(() => loader.load(url, g => { tick(label); res(g); }, undefined, fail), 900);
+          else rej(new Error(label + ' 加载失败'));
+        };
+        loader.load(url, g => { tick(label); res(g); }, undefined, fail);
+      });
     }
     function loadTex(url) {
-      return new Promise((res, rej) => texLoader.load(url, res, undefined, () => rej(new Error(url))));
+      return new Promise((res, rej) => {
+        let left = 2;
+        const fail = () => {
+          if (left-- > 0) setTimeout(() => texLoader.load(url, res, undefined, fail), 900);
+          else rej(new Error(url));
+        };
+        texLoader.load(url, res, undefined, fail);
+      });
     }
 
     const J = './assets/jungle/';
@@ -961,7 +972,8 @@
         tick('地表…');
 
         const R = {};
-        await Promise.all(ASSETS.map(async a => { R[a.key] = await loadGLTF(a.url, a.label); }));
+        // 逐个加载：慢速/受干扰网络下并发过多会被重置连接
+        for (const a of ASSETS) R[a.key] = await loadGLTF(a.url, a.label);
 
         const stage = t => { document.title = '丛林村落 | 建模 ' + t; dbg('建模 ' + t); };
         stage('地面');
